@@ -1,0 +1,128 @@
+# ================= Model Arguments =================
+model_name_or_path: /root/autodl-fs/llm_models/Qwen/Qwen3-4B
+model_revision: main
+torch_dtype: bfloat16
+# flash_attention_2 requires the `flash-attn` package compiled for the current torch/CUDA.
+# On Blackwell (sm_120) setups this often causes installation/compat issues; `sdpa` works out of the box.
+attn_implementation: sdpa
+# attn_implementation: flash_attention_2
+use_peft: false
+
+# ================= Data Arguments =================
+dataset_name: /root/autodl-fs/datasets/open-r1/OpenR1-Math-220k
+dataset_prompt_column: problem
+system_prompt: "You are a helpful AI Assistant that provides well-reasoned and detailed responses. You first think about the reasoning process as an internal monologue and then provide the user with the answer. Put your final answer within \\boxed{}. Respond in the following format: <think>\n...\n</think>\n<answer>\n...\n</answer>"
+
+# ================= GRPO Trainer Config =================
+bf16: true
+use_vllm: true
+vllm_gpu_memory_utilization: 0.3
+vllm_max_model_len: 6144
+vllm_enforce_eager: true
+
+# dataloader_num_workers: 4 
+
+do_eval: false
+per_device_train_batch_size: 8
+per_device_eval_batch_size: 8
+gradient_accumulation_steps: 2
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+
+run_name: Q3-4B-emb_rubric
+hub_model_id: Qwen3-4B-Math-220k-GRPO-emb_rubric
+output_dir: /root/autodl-tmp/trained_models/Qwen3-4B-Math-220k-GRPO-emb_rubric
+
+hub_strategy: every_save
+
+# output_dir: /root/autodl-tmp/trained_models/Qwen3-4B-Math-220k-GRPO-full_v2
+# resume_from_checkpoint: true
+
+resume_from_checkpoint: false
+# resume_from_checkpoint: true
+
+overwrite_output_dir: false
+save_strategy: "steps"
+save_steps: 100
+save_total_limit: 1
+push_to_hub: false
+
+learning_rate: 1.0e-06
+log_completions: true
+log_level: info
+logging_first_step: true
+logging_steps: 10
+logging_strategy: steps
+lr_scheduler_type: cosine
+max_prompt_length: 4096
+max_completion_length: 2048
+max_steps: -1
+num_generations: 8
+# Controls how many prompts are sent to vLLM per generation step; lowering reduces peak memory.
+# generation_batch_size: 16
+generation_batch_size: 64
+num_train_epochs: 1
+
+report_to:
+- wandb
+
+reward_funcs:
+- accuracy
+- format
+- tag_count
+# - reasoning_checkpoint_f1
+# - consensus
+# - embedding_rubric
+
+# ================= Consensus Reward Config =================
+# - consensus_threshold: golden anchor 出现频率阈值（在同一 group 的 correct 样本中）
+# - consensus_min_correct: correct 样本数 >= 该值才会计算 golden anchor，否则整组 consensus reward=0
+# - consensus_max_golden_steps: 每个样本的命中数上限（cap），null 表示不限制
+consensus_threshold: 0.6
+consensus_min_correct: 2
+consensus_max_golden_steps: null
+
+# ================= Embedding Rubric Reward Config =================
+# AutoRubric-style（组内）自聚合：只在同一 prompt 的 num_generations 内，用“正确轨迹”提炼 golden checkpoints
+# - embedding_rubric_backend: tfidf（无需下载，便宜稳定）或 transformers（需要本地 embedding 模型）
+# embedding_rubric_backend: tfidf
+embedding_rubric_backend: transformers
+# 计算模式：pairwise=生成 vs 标准答案（solution/answer）一一对齐；group_rubric=组内自聚合 golden checkpoints
+# embedding_rubric_mode: pairwise
+embedding_rubric_mode: group_rubric
+
+# DBSCAN(cosine distance) 聚类参数；eps 越小越严格（0.15~0.30 之间常用起点）
+embedding_rubric_merge_eps: 0.2
+embedding_rubric_min_cluster_size: 2
+# golden checkpoint 支持度阈值（在正确轨迹内的覆盖比例）
+embedding_rubric_threshold: 0.6
+embedding_rubric_min_success: 2
+# 匹配阈值：step embedding 与 golden centroid 的 cosine 相似度 >= 该值视为命中
+embedding_rubric_match_threshold: 0.8
+# pairwise 模式下：think/answer 两部分的权重（总 reward = w_think * think_sim + w_answer * answer_sim）
+embedding_rubric_think_weight: 2.0
+embedding_rubric_answer_weight: 1.0
+# pairwise 模式下：是否惩罚 step 数量不一致（true=按 max(len_gen, len_ref) 平均）
+embedding_rubric_pairwise_penalize_length_mismatch: false
+# 每个样本最多计多少个 golden checkpoint 命中（cap），null 表示不限制
+embedding_rubric_max_golden_hits: 10
+# 每个 step 最大字符数（控制计算量）
+embedding_rubric_step_max_chars: 512
+# transformers 后端可用时填写（本地路径/缓存名）。
+# 如果保持为 null，训练脚本会默认使用顶部的 model_name_or_path（即用大模型本身做 embedding，较慢/更吃内存）。
+embedding_rubric_model_name_or_path: null
+embedding_rubric_device: null
+
+reward_weights:
+- 2.0
+- 1.0
+- 1.0
+# - 0.1
+# - 0.1
+
+seed: 42
+warmup_ratio: 0.1
+
+wandb_project: llm_rl_learning_efficiency
+wandb_run_group: grpo

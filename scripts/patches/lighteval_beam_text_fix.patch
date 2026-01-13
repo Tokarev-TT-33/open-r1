@@ -1,0 +1,28 @@
+*** Begin Patch
+*** Update File: openr1/lib/python3.11/site-packages/lighteval/models/vllm/vllm_model.py
+@@
+-                    text = seq.text
+-                    if text is None:
+-                        text = self.tokenizer.decode(gen_token_ids, skip_special_tokens=True)
++                    # IMPORTANT:
++                    # vLLM BeamSearchSequence.text may include the *full* decoded sequence (prompt + generation).
++                    # Downstream metrics (e.g. MATH-500) often extract the "first match" from the completion text;
++                    # if the prompt is included, they may accidentally extract math from the *question* and mark
++                    # almost everything wrong. Therefore we ensure `text` contains only the generated suffix.
++                    text = None
++                    if getattr(seq, "text", None):
++                        full_text = seq.text
++                        # Best-effort strip of prompt prefix if present.
++                        try:
++                            prompt_text = self.tokenizer.decode(prompt_ids, skip_special_tokens=True)
++                            if full_text.startswith(prompt_text):
++                                text = full_text[len(prompt_text) :].lstrip()
++                            else:
++                                text = None
++                        except Exception:
++                            text = None
++                    if text is None:
++                        text = self.tokenizer.decode(gen_token_ids, skip_special_tokens=True)
+*** End Patch
+
+

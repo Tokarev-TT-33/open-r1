@@ -1,0 +1,85 @@
+# ================= Model Arguments =================
+model_name_or_path: /root/autodl-tmp/llm_models/Qwen/Qwen3-4B
+model_revision: main
+torch_dtype: bfloat16
+# flash_attention_2 requires the `flash-attn` package compiled for the current torch/CUDA.
+# On Blackwell (sm_120) setups this often causes installation/compat issues; `sdpa` works out of the box.
+attn_implementation: sdpa
+# attn_implementation: flash_attention_2
+use_peft: false
+
+# ================= Data Arguments =================
+dataset_name: /root/autodl-tmp/datasets/open-r1/OpenR1-Math-220k
+dataset_prompt_column: problem
+system_prompt: "You are a helpful AI Assistant that provides well-reasoned and detailed responses. You first think about the reasoning process as an internal monologue and then provide the user with the answer. Respond in the following format: <think>\n...\n</think>\n<answer>\n...\n</answer>"
+
+# ================= GRPO Trainer Config =================
+bf16: true
+use_vllm: true
+vllm_gpu_memory_utilization: 0.2
+vllm_max_model_len: 8192
+vllm_enforce_eager: true
+
+# dataloader_num_workers: 4 
+
+do_eval: false
+per_device_train_batch_size: 8
+per_device_eval_batch_size: 8
+gradient_accumulation_steps: 2
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+
+
+hub_model_id: Qwen3-4B-Math-220k-GRPO-full
+hub_strategy: every_save
+output_dir: /root/autodl-tmp/trained_models/Qwen3-4B-Math-220k-GRPO-full_v2—rmj
+overwrite_output_dir: false
+save_strategy: "steps"
+save_steps: 100
+save_total_limit: 2
+resume_from_checkpoint: true
+push_to_hub: false
+
+learning_rate: 2.0e-05
+log_completions: true
+log_level: info
+logging_first_step: true
+logging_steps: 10
+logging_strategy: steps
+lr_scheduler_type: cosine
+max_prompt_length: 4096
+max_completion_length: 2048
+max_steps: -1
+num_generations: 8
+# Controls how many prompts are sent to vLLM per generation step; lowering reduces peak memory.
+# generation_batch_size: 16
+generation_batch_size: 64
+num_train_epochs: 1
+
+report_to:
+- wandb
+
+reward_funcs:
+- accuracy
+- format
+- tag_count
+# - reasoning_checkpoint_f1
+# - consensus
+reward_weights:
+- 1.0
+- 1.0
+- 1.0
+# - 1.0
+# 如果启用 consensus，请确保 reward_weights 数量对齐，并按需调整以下参数：
+# consensus_threshold: 0.6        # >= threshold 才算 golden
+# consensus_min_correct: 2        # 正确样本数 >= 2 才计算 golden
+# consensus_step_reward: 1.0      # 每命中一个 golden anchor 的奖励（不再归一化）
+# consensus_max_reward: null      # 奖励上限；null 表示不封顶
+
+seed: 42
+warmup_ratio: 0.1
+
+wandb_project: llm_rl_learning_efficiency
+wandb_run_group: grpo
+run_name: Qwen3-4B-Math-220k-GRPO-v1_cmg
